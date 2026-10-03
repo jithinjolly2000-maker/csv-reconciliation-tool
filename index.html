@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Reconciliation Tool</title>
+<style>
+  :root{
+    --paper:#f7f8fa; --panel:#ffffff; --ink:#17202b; --muted:#56626f; --dim:#8793a1;
+    --line:#e4e8ee; --accent:#2d5bd7; --accent-soft:#2d5bd712;
+    --match:#17854a; --match-bg:#17854a12;
+    --mismatch:#c0392b; --mismatch-bg:#c0392b12;
+    --onlyA:#b5841f; --onlyA-bg:#b5841f14;
+    --onlyB:#7a3fb0; --onlyB-bg:#7a3fb012;
+    --shadow:0 1px 2px rgba(20,25,30,.04),0 6px 20px rgba(20,25,30,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--paper);color:var(--ink);
+    line-height:1.45;font-size:14px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+
+  header.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;
+    border-bottom:2px solid var(--accent);padding-bottom:16px}
+  .brand h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .brand .sub{color:var(--muted);font-size:13px;margin-top:4px;max-width:66ch}
+  .by{text-align:right;font-size:12px;color:var(--muted)}
+  .by a{color:var(--accent);text-decoration:none}
+  .by a:hover{text-decoration:underline}
+
+  .note{background:var(--accent-soft);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:10px 14px;border-radius:6px;font-size:12.5px;color:var(--muted);margin:18px 0 24px}
+  .note b{color:var(--ink)}
+
+  .step{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:10px}
+
+  /* Upload zone */
+  .uploads{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+  @media(max-width:720px){.uploads{grid-template-columns:1fr}}
+  .drop{background:var(--panel);border:1.5px dashed var(--line);border-radius:12px;padding:22px;text-align:center;
+    transition:.15s;box-shadow:var(--shadow)}
+  .drop.hover{border-color:var(--accent);background:var(--accent-soft)}
+  .drop.loaded{border-style:solid;border-color:var(--match);text-align:left}
+  .drop h3{font-size:14px;margin-bottom:6px}
+  .drop .fname{font-weight:700;color:var(--accent)}
+  .drop p{font-size:12.5px;color:var(--dim)}
+  .drop label.btn{display:inline-block;margin-top:10px;background:var(--accent);color:#fff;font-size:12.5px;font-weight:600;
+    padding:7px 14px;border-radius:7px;cursor:pointer}
+  .drop input[type=file]{display:none}
+  .drop .meta{font-size:12px;color:var(--muted);margin-top:8px}
+  .drop .meta b{color:var(--ink)}
+
+  .config{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:18px}
+  .config .row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld label{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .fld select{font:inherit;font-size:13.5px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper);min-width:170px}
+  .cmpcols{flex:1;min-width:220px}
+  .chk{display:inline-flex;gap:5px;align-items:center;font-size:12.5px;background:var(--paper);border:1px solid var(--line);
+    padding:4px 9px;border-radius:20px;margin:3px 4px 0 0;cursor:pointer}
+  .chk input{accent-color:var(--accent)}
+  .run{background:var(--accent);color:#fff;border:none;font:inherit;font-size:14px;font-weight:700;padding:10px 22px;
+    border-radius:9px;cursor:pointer;transition:.12s}
+  .run:hover{filter:brightness(1.07)} .run:disabled{opacity:.45;cursor:not-allowed}
+  .sample{background:none;border:1px solid var(--line);font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);
+    padding:9px 15px;border-radius:9px;cursor:pointer}
+  .sample:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* Summary */
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px;margin:4px 0 20px}
+  .scard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 15px;box-shadow:var(--shadow);
+    border-top:3px solid var(--line)}
+  .scard.m{border-top-color:var(--match)} .scard.x{border-top-color:var(--mismatch)}
+  .scard.a{border-top-color:var(--onlyA)} .scard.b{border-top-color:var(--onlyB)}
+  .scard .n{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .scard .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:2px}
+
+  /* Results */
+  .results{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+  .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+  .tabs button{font:inherit;font-size:12.5px;font-weight:600;padding:11px 16px;border:none;background:none;color:var(--muted);
+    cursor:pointer;border-bottom:2px solid transparent;transition:.12s}
+  .tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabs button .b{display:inline-block;min-width:18px;font-size:11px;background:var(--paper);border-radius:10px;padding:0 6px;margin-left:5px}
+  .tabs .export{margin-left:auto;align-self:center;padding-right:14px}
+  .tabs .export button{color:var(--accent);border:1px solid var(--line);border-radius:7px;padding:6px 12px}
+
+  .tbl-scroll{overflow-x:auto;max-height:460px;overflow-y:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:8px 13px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);font-weight:700;
+    position:sticky;top:0;background:var(--panel);z-index:1}
+  tbody tr:hover{background:var(--accent-soft)}
+  td.key{font-weight:700}
+  .cell-diff{background:var(--mismatch-bg);color:var(--mismatch);font-weight:600;border-radius:4px;padding:1px 5px}
+  .was{color:var(--dim);text-decoration:line-through;margin-right:5px}
+  .empty{padding:40px 20px;text-align:center;color:var(--dim);font-size:13px}
+  .pillrow{padding:9px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--paper)}
+
+  footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--dim);text-align:center}
+  footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <h1>CSV Reconciliation Tool</h1>
+      <div class="sub">Upload two CSV files, pick a key column, and reconcile them — the tool matches records and surfaces exact matches, field-level mismatches, and rows present in only one file. Everything runs in your browser; no data is uploaded anywhere.</div>
+    </div>
+    <div class="by">
+      Built by <b>Jithin J</b><br>
+      <a href="https://github.com/jithinjolly2000-maker" target="_blank" rel="noopener">github.com/jithinjolly2000-maker</a>
+    </div>
+  </header>
+
+  <div class="note">
+    🔒 <b>Private by design.</b> Files are parsed locally in your browser with JavaScript — nothing is sent to a server. Try it with the <b>Load sample data</b> button, or drop in two of your own CSVs.
+  </div>
+
+  <!-- Step 1: upload -->
+  <div class="step">Step 1 · Load two files</div>
+  <div class="uploads">
+    <div class="drop" id="dropA" data-side="A">
+      <h3>File A <span style="color:var(--dim);font-weight:400">(e.g. system export)</span></h3>
+      <p id="pA">Drag &amp; drop a .csv here</p>
+      <label class="btn">Choose file<input type="file" accept=".csv,text/csv" data-side="A"></label>
+      <div class="meta" id="metaA"></div>
+    </div>
+    <div class="drop" id="dropB" data-side="B">
+      <h3>File B <span style="color:var(--dim);font-weight:400">(e.g. source of truth)</span></h3>
+      <p id="pB">Drag &amp; drop a .csv here</p>
+      <label class="btn">Choose file<input type="file" accept=".csv,text/csv" data-side="B"></label>
+      <div class="meta" id="metaB"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: config -->
+  <div class="step">Step 2 · Configure</div>
+  <div class="config">
+    <div class="row">
+      <div class="fld">
+        <label>Key column (unique ID)</label>
+        <select id="keyCol"><option value="">— load files first —</option></select>
+      </div>
+      <div class="fld cmpcols">
+        <label>Columns to compare</label>
+        <div id="cmpCols" style="min-height:30px"><span style="color:var(--dim);font-size:12.5px">Columns appear here once both files are loaded.</span></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="run" id="runBtn" disabled>Reconcile ▸</button>
+      <button class="sample" id="sampleBtn">Load sample data</button>
+    </div>
+  </div>
+
+  <!-- Step 3: results -->
+  <div id="resultsWrap" style="display:none">
+    <div class="step">Step 3 · Results</div>
+    <div class="summary" id="summary"></div>
+    <div class="results">
+      <div class="tabs" id="tabs">
+        <button data-t="mismatch" class="active">Mismatches <span class="b" id="cMismatch">0</span></button>
+        <button data-t="match">Matches <span class="b" id="cMatch">0</span></button>
+        <button data-t="onlyA">Only in A <span class="b" id="cOnlyA">0</span></button>
+        <button data-t="onlyB">Only in B <span class="b" id="cOnlyB">0</span></button>
+        <span class="export"><button id="exportBtn">⤓ Export current view (CSV)</button></span>
+      </div>
+      <div id="resultBody"></div>
+    </div>
+  </div>
+
+  <footer>
+    Static demo · vanilla HTML/CSS/JS · runs 100% in-browser · GitHub Pages ·
+    <a href="https://github.com/jithinjolly2000-maker/csv-reconciliation-tool" target="_blank" rel="noopener">source</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- CSV parser (handles quotes, commas, newlines) ----------
+  function parseCSV(text){
+    text = text.replace(/^\uFEFF/,""); // strip BOM
+    var rows=[], row=[], cur="", i=0, inQ=false, c;
+    while(i<text.length){
+      c=text[i];
+      if(inQ){
+        if(c==='"'){ if(text[i+1]==='"'){ cur+='"'; i+=2; continue; } inQ=false; i++; continue; }
+        cur+=c; i++; continue;
+      }
+      if(c==='"'){ inQ=true; i++; continue; }
+      if(c===','){ row.push(cur); cur=""; i++; continue; }
+      if(c==='\r'){ i++; continue; }
+      if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=""; i++; continue; }
+      cur+=c; i++;
+    }
+    if(cur.length||row.length){ row.push(cur); rows.push(row); }
+    if(!rows.length) return {headers:[],records:[]};
+    var headers=rows[0].map(function(h){return h.trim();});
+    var records=[];
+    for(var r=1;r<rows.length;r++){
+      if(rows[r].length===1 && rows[r][0]==="") continue; // skip blank line
+      var obj={};
+      for(var h=0;h<headers.length;h++){ obj[headers[h]] = (rows[r][h]!==undefined?rows[r][h]:"").trim(); }
+      records.push(obj);
+    }
+    return {headers:headers, records:records};
+  }
+
+  function toCSV(headers, rows){
+    function esc(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+    return headers.map(esc).join(",")+"\n"+rows.map(function(r){return headers.map(function(h){return esc(r[h]);}).join(",");}).join("\n");
+  }
+
+  // ---------- State ----------
+  var data={A:null,B:null}, result=null, activeTab="mismatch";
+
+  // ---------- File loading ----------
+  function loadFile(side, file){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var parsed=parseCSV(e.target.result);
+      data[side]=parsed;
+      var drop=document.getElementById("drop"+side);
+      drop.classList.add("loaded");
+      document.getElementById("p"+side).innerHTML='<span class="fname">'+file.name+'</span>';
+      document.getElementById("meta"+side).innerHTML='<b>'+parsed.records.length+'</b> rows · <b>'+parsed.headers.length+'</b> columns';
+      refreshConfig();
+    };
+    reader.readAsText(file);
+  }
+
+  function commonHeaders(){
+    if(!data.A||!data.B) return [];
+    return data.A.headers.filter(function(h){ return data.B.headers.indexOf(h)>=0; });
+  }
+
+  function refreshConfig(){
+    var common=commonHeaders();
+    var keySel=document.getElementById("keyCol");
+    if(data.A&&data.B){
+      keySel.innerHTML=common.map(function(h){return '<option>'+h+'</option>';}).join("");
+      // pick a likely key (contains id)
+      var idx=common.findIndex(function(h){return /id|key|ref|number|no\b/i.test(h);});
+      if(idx>=0) keySel.selectedIndex=idx;
+      renderCmpCols();
+    } else {
+      keySel.innerHTML='<option value="">— load files first —</option>';
+    }
+    document.getElementById("runBtn").disabled = !(data.A&&data.B&&common.length>=1);
+  }
+
+  function renderCmpCols(){
+    var common=commonHeaders(), key=document.getElementById("keyCol").value;
+    var cols=common.filter(function(h){return h!==key;});
+    var box=document.getElementById("cmpCols");
+    if(!cols.length){ box.innerHTML='<span style="color:var(--dim);font-size:12.5px">No shared non-key columns to compare.</span>'; return; }
+    box.innerHTML=cols.map(function(h){
+      return '<label class="chk"><input type="checkbox" value="'+h+'" checked>'+h+'</label>';
+    }).join("");
+  }
+
+  document.getElementById("keyCol").addEventListener("change",renderCmpCols);
+
+  // input[type=file]
+  Array.prototype.forEach.call(document.querySelectorAll('input[type=file]'),function(inp){
+    inp.addEventListener("change",function(){ if(this.files[0]) loadFile(this.getAttribute("data-side"), this.files[0]); });
+  });
+  // drag & drop
+  ["A","B"].forEach(function(side){
+    var drop=document.getElementById("drop"+side);
+    drop.addEventListener("dragover",function(e){e.preventDefault();drop.classList.add("hover");});
+    drop.addEventListener("dragleave",function(){drop.classList.remove("hover");});
+    drop.addEventListener("drop",function(e){
+      e.preventDefault();drop.classList.remove("hover");
+      var f=e.dataTransfer.files[0]; if(f) loadFile(side,f);
+    });
+  });
+
+  // ---------- Reconcile ----------
+  function reconcile(){
+    var key=document.getElementById("keyCol").value;
+    var cmpCols=Array.prototype.slice.call(document.querySelectorAll('#cmpCols input:checked')).map(function(c){return c.value;});
+    var mapA={}, mapB={};
+    data.A.records.forEach(function(r){ mapA[r[key]]=r; });
+    data.B.records.forEach(function(r){ mapB[r[key]]=r; });
+
+    var matches=[], mismatches=[], onlyA=[], onlyB=[];
+    Object.keys(mapA).forEach(function(k){
+      if(k==="") return;
+      if(mapB[k]===undefined){ onlyA.push(mapA[k]); return; }
+      var diffs=[];
+      cmpCols.forEach(function(col){
+        if((mapA[k][col]||"")!==(mapB[k][col]||"")){ diffs.push({col:col, a:mapA[k][col]||"", b:mapB[k][col]||""}); }
+      });
+      if(diffs.length){ mismatches.push({key:k, a:mapA[k], b:mapB[k], diffs:diffs}); }
+      else { matches.push(mapA[k]); }
+    });
+    Object.keys(mapB).forEach(function(k){ if(k!=="" && mapA[k]===undefined) onlyB.push(mapB[k]); });
+
+    result={key:key, cmpCols:cmpCols, matches:matches, mismatches:mismatches, onlyA:onlyA, onlyB:onlyB};
+    renderResults();
+  }
+
+  function renderResults(){
+    document.getElementById("resultsWrap").style.display="block";
+    var total=result.matches.length+result.mismatches.length+result.onlyA.length+result.onlyB.length;
+    var matchPct=total?Math.round(result.matches.length/total*100):0;
+    document.getElementById("summary").innerHTML=
+      card("m",result.matches.length,"Exact matches")+
+      card("x",result.mismatches.length,"Field mismatches")+
+      card("a",result.onlyA.length,"Only in A")+
+      card("b",result.onlyB.length,"Only in B")+
+      card("",matchPct+"%","Match rate");
+    document.getElementById("cMatch").textContent=result.matches.length;
+    document.getElementById("cMismatch").textContent=result.mismatches.length;
+    document.getElementById("cOnlyA").textContent=result.onlyA.length;
+    document.getElementById("cOnlyB").textContent=result.onlyB.length;
+    renderTab();
+    document.getElementById("resultsWrap").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function card(cls,n,l){ return '<div class="scard '+cls+'"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>'; }
+
+  function renderTab(){
+    var body=document.getElementById("resultBody"), key=result.key;
+    if(activeTab==="mismatch"){
+      if(!result.mismatches.length){ body.innerHTML='<div class="empty">No field mismatches — every shared key agrees. ✓</div>'; return; }
+      var cols=result.cmpCols;
+      body.innerHTML='<div class="pillrow">Showing field-level differences. <span class="was">struck</span> = File A value, bold red = File B value.</div>'+
+        '<div class="tbl-scroll"><table><thead><tr><th>'+key+'</th>'+cols.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead><tbody>'+
+        result.mismatches.map(function(m){
+          return '<tr><td class="key">'+esc(m.key)+'</td>'+cols.map(function(c){
+            var d=m.diffs.filter(function(x){return x.col===c;})[0];
+            if(d){ return '<td><span class="was">'+esc(d.a)+'</span><span class="cell-diff">'+esc(d.b)+'</span></td>'; }
+            return '<td>'+esc(m.a[c]||"")+'</td>';
+          }).join("")+'</tr>';
+        }).join("")+'</tbody></table></div>';
+    } else {
+      var rows = activeTab==="match"?result.matches : activeTab==="onlyA"?result.onlyA : result.onlyB;
+      if(!rows.length){ body.innerHTML='<div class="empty">Nothing in this category.</div>'; return; }
+      var hdrs = activeTab==="onlyB"?data.B.headers : data.A.headers;
+      body.innerHTML='<div class="tbl-scroll"><table><thead><tr>'+hdrs.map(function(h){return '<th>'+h+'</th>';}).join("")+
+        '</tr></thead><tbody>'+rows.map(function(r){
+          return '<tr>'+hdrs.map(function(h){return '<td'+(h===key?' class="key"':'')+'>'+esc(r[h]||"")+'</td>';}).join("")+'</tr>';
+        }).join("")+'</tbody></table></div>';
+    }
+  }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  document.getElementById("tabs").addEventListener("click",function(e){
+    var b=e.target.closest("button[data-t]"); if(!b) return;
+    activeTab=b.getAttribute("data-t");
+    Array.prototype.forEach.call(this.querySelectorAll("button[data-t]"),function(x){x.classList.remove("active");});
+    b.classList.add("active");
+    renderTab();
+  });
+
+  document.getElementById("runBtn").addEventListener("click",reconcile);
+
+  // ---------- Export ----------
+  document.getElementById("exportBtn").addEventListener("click",function(){
+    if(!result) return;
+    var key=result.key, headers, rows, name;
+    if(activeTab==="mismatch"){
+      headers=[key].concat(result.cmpCols.map(function(c){return c+" (A)";})).concat(result.cmpCols.map(function(c){return c+" (B)";}));
+      rows=result.mismatches.map(function(m){
+        var o={}; o[key]=m.key;
+        result.cmpCols.forEach(function(c){ o[c+" (A)"]=m.a[c]||""; o[c+" (B)"]=m.b[c]||""; });
+        return o;
+      });
+      name="mismatches.csv";
+    } else {
+      var src = activeTab==="match"?result.matches : activeTab==="onlyA"?result.onlyA : result.onlyB;
+      headers = activeTab==="onlyB"?data.B.headers : data.A.headers;
+      rows=src; name=activeTab+".csv";
+    }
+    var blob=new Blob([toCSV(headers,rows)],{type:"text/csv"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  });
+
+  // ---------- Sample data ----------
+  document.getElementById("sampleBtn").addEventListener("click",function(){
+    var headersA="InvoiceID,Vendor,Amount,Currency,Status\n";
+    var headersB="InvoiceID,Vendor,Amount,Currency,Status\n";
+    var a=[
+      "INV-1001,Nordwind GmbH,12450.00,EUR,Approved",
+      "INV-1002,Lumina SARL,8800.50,EUR,Approved",
+      "INV-1003,Orbit Ltd,4300.00,GBP,Pending",
+      "INV-1004,Vireo B.V.,15600.00,EUR,Approved",
+      "INV-1005,Pallas S.L.,2200.00,EUR,Rejected",
+      "INV-1006,Castor GmbH,9900.00,EUR,Approved",
+      "INV-1007,Meridian Ltd,3100.75,GBP,Approved",
+      "INV-1009,Solace S.p.A.,760.00,EUR,Pending"
+    ];
+    var b=[
+      "INV-1001,Nordwind GmbH,12450.00,EUR,Approved",
+      "INV-1002,Lumina SARL,8850.50,EUR,Approved",      // amount differs
+      "INV-1003,Orbit Ltd,4300.00,GBP,Approved",        // status differs
+      "INV-1004,Vireo B.V.,15600.00,EUR,Approved",
+      "INV-1005,Pallas S.L.,2200.00,USD,Rejected",      // currency differs
+      "INV-1006,Castor GmbH,9900.00,EUR,Approved",
+      "INV-1008,Tindra Ltd,5400.00,EUR,Approved",        // only in B
+      "INV-1010,Halcyon B.V.,1200.00,EUR,Pending"        // only in B
+    ];
+    data.A=parseCSV(headersA+a.join("\n"));
+    data.B=parseCSV(headersB+b.join("\n"));
+    ["A","B"].forEach(function(side){
+      var drop=document.getElementById("drop"+side);
+      drop.classList.add("loaded");
+      document.getElementById("p"+side).innerHTML='<span class="fname">sample_'+side.toLowerCase()+'.csv</span>';
+      document.getElementById("meta"+side).innerHTML='<b>'+data[side].records.length+'</b> rows · <b>'+data[side].headers.length+'</b> columns';
+    });
+    refreshConfig();
+    reconcile();
+  });
+
+})();
+</script>
+</body>
+</html>
